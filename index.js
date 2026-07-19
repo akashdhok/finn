@@ -7,6 +7,7 @@ import morgan from 'morgan';
 import connectDB from './config/db.connect.js';
 import userRoutes from './routes/user.routes.js'
 import adminRoutes from "./routes/admin.routes.js"
+import { adminRegister } from './utils/adminRegister.js';
 const app = express();
 const PORT = process.env.PORT || 5050;
 
@@ -39,4 +40,5 @@ await connectDB();
 import("./cron/roi.cron.js")
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
+    adminRegister()
 });         

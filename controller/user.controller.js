@@ -11,9 +11,9 @@ import ReferralIncome from "../models/referral.model.js";
 import { sendNewPassword } from "../utils/sendOTP.js";
 export const userRegister = async (req, res) => {
   try {
-    const { name, email, mobile, password, referredBy } = req.body;
+    const { name, email, password, referredBy } = req.body;
 
-    if (!name || !email || !mobile || !password) {
+    if (!name || !email || !password) {
       return res.status(400).json({
         success: false,
         message: "All fields are required",
@@ -21,13 +21,13 @@ export const userRegister = async (req, res) => {
     }
 
     const existingUser = await User.findOne({
-      $or: [{ email }, { mobile }],
+      $or: [{ email }],
     });
 
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: "Email or Mobile already registered",
+        message: "Email already registered",
       });
     }
 
@@ -44,7 +44,6 @@ export const userRegister = async (req, res) => {
       const newUser = new User({
         name,
         email,
-        mobile,
         password: hashedPassword,
         showPassword: password,
         referralCode,
@@ -90,7 +89,6 @@ export const userRegister = async (req, res) => {
     const newUser = new User({
       name,
       email,
-      mobile,
       password: hashedPassword,
       showPassword: password,
       referralCode,
