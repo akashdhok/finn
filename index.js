@@ -23,7 +23,13 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use(morgan('dev'));
-
+app.get("/", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "API is running 🚀",
+    timestamp: new Date(),
+  });
+});
 
 
 app.use('/api/user', userRoutes);
