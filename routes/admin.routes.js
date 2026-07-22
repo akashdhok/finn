@@ -7,6 +7,8 @@ import { approveWithdrawal, getAllWithdrawal, rejectWithdrawal } from "../contro
 import { getAdminROIHistory } from "../services/dailyRoi.js";
 import { getAdminReferralHistory, getUserReferralHistory } from "../services/directReferralIncome.js";
 import { getAllROIOnROI } from "../services/roiOnroi.js";
+import { getAllLeadershipBonus } from "../services/leadership.js";
+import { getAllRewardHistory } from "../services/reward.js";
 
 
 const router = express.Router();
@@ -42,7 +44,16 @@ router.get("/get-percentage" , isAdminAuthenticated , getPercentage)
 router.get("/get-roi-history" , isAdminAuthenticated , getAdminROIHistory)
 router.get("/get-referral-history" , isAdminAuthenticated , getAdminReferralHistory)
 router.get("/get-roi-on-roi-history" , isAdminAuthenticated , getAllROIOnROI)
-
+router.get(
+  "/leadership-bonus",
+  isAdminAuthenticated,
+  getAllLeadershipBonus
+);
+router.get(
+  "/reward-history",
+  isAdminAuthenticated,
+  getAllRewardHistory
+);
 
 router.post("/add-token-percentage" , isAdminAuthenticated , createOrUpdateAdminPercentage)
 router.get("/get-token-percentage" , isAdminAuthenticated , getAdminPercentage)

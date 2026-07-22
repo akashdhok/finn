@@ -28,6 +28,9 @@ import { getUserReferralHistory } from "../services/directReferralIncome.js";
 import { getMyROIOnROI } from "../services/roiOnroi.js";
 import { getAdminPercentage, getUsdtRate } from "../controller/admin.controller.js";
 import { adminWalletAddress } from "../controller/admin.controller.js";
+import { getMyLeadershipBonus } from "../services/leadership.js";
+import { getMyRewardHistory } from "../services/reward.js";
+import { getBlockchainDashboard, getBlockchainPublicStats, getNetworkStats, getRecentIncomeHistories, getSystemRecentIncomeHistory } from "../controller/ledger.controller.js";
 const router = express.Router();
 
 
@@ -45,7 +48,7 @@ router.get("/get-admin-wallet-address" , isAuthenticated , adminWalletAddress)
 router.get("/my-referrals", isAuthenticated, getMyReferrals);
 router.get("/my-downline", isAuthenticated, getMyDownline);
 
-router.post("/investment" , isAuthenticated , investment)
+router.post("/investment" , isAuthenticated , testInvestment)
 router.get("/my-investment" , isAuthenticated , myInvestment)
 
 router.get("/send-otp", isAuthenticated, sendOtpForWithdrwal);
@@ -62,10 +65,35 @@ router.post("/change-password" , isAuthenticated , changePassword)
 router.get("/get-roi-history" , isAuthenticated , getUserROIHistory)
 router.get("/get-referral-history" , isAuthenticated , getUserReferralHistory)
 router.get("/get-roi-on-roi-history" , isAuthenticated , getMyROIOnROI)
+router.get(
+  "/my-leadership-bonus",
+  isAuthenticated,
+  getMyLeadershipBonus
+);
 
+router.get(
+  "/my-reward-history",
+  isAuthenticated,
+  getMyRewardHistory
+);
 
 router.get("/get-token-percentage" , isAuthenticated , getAdminPercentage)
 router.get("/get-rate",isAuthenticated, getUsdtRate);
 
+router.get(
+  "/recent-income-history",
+  isAuthenticated,
+  getRecentIncomeHistories
+);
 
+//
+router.get("/network/stats", getNetworkStats);
+router.get("/blockchain-dash/:hash", getBlockchainDashboard);
+router.get("/public-blockchain-dash", getBlockchainPublicStats);
+
+
+router.get(
+  "/system/recent-income-history",
+  getSystemRecentIncomeHistory
+);
 export default router;

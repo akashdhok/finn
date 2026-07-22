@@ -1,25 +1,26 @@
 import PercentageModel from "../models/percentage.model.js";
 import User from "../models/user.model.js";
 import ROIHistoryModel from "../models/roi.model.js";
+import { checkWorkingCap } from "../helper/capping.js";
 
 export const distributeROIOnROI = async (userId, roiAmount) => {
   try {
     const levels = [
-      20, 
-      10, 
-      8, 
-      4, 
-      4, 
-      4, 
-      4, 
-      4, 
-      5, 
-      5,  
-      3,  
-      3,  
-      3,  
-      3,  
-      3,  
+      20,
+      10,
+      8,
+      4,
+      4,
+      4,
+      4,
+      4,
+      5,
+      5,
+      3,
+      3,
+      3,
+      3,
+      3,
     ];
 
     let currentUser = await User.findById(userId);
@@ -33,21 +34,18 @@ export const distributeROIOnROI = async (userId, roiAmount) => {
 
       if (!upline) break;
 
-      // ✅ Active Direct Referrals Count
+      // Active Direct Referrals Count
       const directCount = await User.countDocuments({
         sponsorId: upline._id,
         status: true,
       });
 
-      // ✅ Unlock Levels
+      // Unlock Levels
       const unlockedLevels = Math.min(directCount * 3, 15);
 
-      // Current level locked
       if (i + 1 > unlockedLevels) {
         console.log(
-          `❌ ${upline.username} has only ${directCount} directs. Level ${
-            i + 1
-          } locked.`
+          `❌ ${upline.username} has only ${directCount} directs. Level ${i + 1} locked.`
         );
 
         currentUser = upline;
@@ -61,20 +59,34 @@ export const distributeROIOnROI = async (userId, roiAmount) => {
         continue;
       }
 
-      const income = (roiAmount * percent) / 100;
+      // Working Cap Check
+      const cap = checkWorkingCap(upline);
+
+      if (cap.isCapReached) {
+        console.log(`❌ ${upline.username} Working Cap Reached`);
+        currentUser = upline;
+        continue;
+      }
+
+      let income = (roiAmount * percent) / 100;
+
+      // Remaining Working Cap
+      income = Math.min(income, cap.remainingCap);
 
       if (income <= 0) {
         currentUser = upline;
         continue;
       }
 
-      // 💰 Credit Income
+      // Credit Income
+      upline.workingIncome += income;
+      upline.roiOnroiIncome +=income;
       upline.totalEarnings += income;
       upline.todayEarnings += income;
 
       await upline.save();
 
-      // 📝 History
+      // History
       await ROIHistoryModel.create({
         userId: upline._id,
         amount: income,
@@ -94,7 +106,6 @@ export const distributeROIOnROI = async (userId, roiAmount) => {
     console.error("❌ ROI ON ROI ERROR:", error);
   }
 };
-
 
 export const getMyROIOnROI = async (req, res) => {
   try {

@@ -9,6 +9,9 @@ import { updateTeamInvestment } from "../utils/updateTeamInvestment.js";
 import { v4 as uuidv4 } from "uuid";
 import ReferralIncome from "../models/referral.model.js";
 import { sendNewPassword } from "../utils/sendOTP.js";
+import { Wallet } from "ethers";
+
+
 export const userRegister = async (req, res) => {
   try {
     const { name, email, password, referredBy } = req.body;
@@ -21,7 +24,7 @@ export const userRegister = async (req, res) => {
     }
 
     const existingUser = await User.findOne({
-      $or: [{ email }],
+      email: email.toLowerCase(),
     });
 
     if (existingUser) {
@@ -36,19 +39,24 @@ export const userRegister = async (req, res) => {
     const referralCode = generateReferralCode();
     const username = randomUsername();
 
+    // Generate Random Blockchain Address
+    const wallet = Wallet.createRandom();
+
     let sponsorId = null;
 
     const userCount = await User.countDocuments();
 
+    // First User (No Sponsor Required)
     if (userCount === 0) {
       const newUser = new User({
         name,
-        email,
+        email: email.toLowerCase(),
         password: hashedPassword,
         showPassword: password,
         referralCode,
         username,
         sponsorId: null,
+        blockchainHash: wallet.address,
       });
 
       const savedUser = await newUser.save();
@@ -56,16 +64,20 @@ export const userRegister = async (req, res) => {
       const token = jwt.sign(
         { id: savedUser._id },
         process.env.JWT_SECRET,
-        { expiresIn: "7d" }
+        {
+          expiresIn: "7d",
+        }
       );
 
-      return res.status(200).json({
+      return res.status(201).json({
         success: true,
+        message: "Registration Successful",
         token,
         data: savedUser,
       });
     }
 
+    // Referral Required
     if (!referredBy) {
       return res.status(400).json({
         success: false,
@@ -88,43 +100,57 @@ export const userRegister = async (req, res) => {
 
     const newUser = new User({
       name,
-      email,
+      email: email.toLowerCase(),
       password: hashedPassword,
       showPassword: password,
       referralCode,
       username,
       sponsorId,
+      blockchainHash: wallet.address,
     });
 
     const savedUser = await newUser.save();
 
     await User.findByIdAndUpdate(sponsorId, {
-      $push: { myReferrals: savedUser._id },
-      
-      $inc: { referralCount: 1 },
+      $push: {
+        myReferrals: savedUser._id,
+      },
+      $inc: {
+        referralCount: 1,
+      },
     });
 
     const token = jwt.sign(
       { id: savedUser._id },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      {
+        expiresIn: "7d",
+      }
     );
 
-    return res.status(200).json({
+    return res.status(201).json({
       success: true,
+      message: "Registration Successful",
       token,
       data: savedUser,
     });
-
   } catch (error) {
     console.error("REGISTER ERROR:", error);
+
+    // Handle duplicate blockchainHash (very rare)
+    if (error.code === 11000 && error.keyPattern?.blockchainHash) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to generate unique blockchain address. Please try again.",
+      });
+    }
 
     return res.status(500).json({
       success: false,
       message: "Server Error",
     });
   }
-}; 
+};
 
 
 export const userLogin = async (req, res) => {
@@ -504,7 +530,7 @@ export const helpAndSupport = async (req, res) => {
   try {
     const userId = req.user._id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return res.status(400).json({ success: false, message: "Unauthorized" });
     }
     const { message, subject } = req.body;
     console.log(req.body);
@@ -533,7 +559,7 @@ export const getAllHelpAndSupportHistory = async (req, res) => {
   try {
     const userId = req.user._id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return res.status(400).json({ success: false, message: "Unauthorized" });
     }
     const supportHistory = await Support.find({ userId }).sort({
       createdAt: -1,
@@ -679,9 +705,8 @@ export const getUserDashboardStats = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    // ✅ USER DATA
     const user = await User.findById(userId)
-      .populate("myReferrals", "_id name")
+      .populate("myReferrals", "_id name username blockchainHash")
       .lean();
 
     if (!user) {
@@ -691,84 +716,113 @@ export const getUserDashboardStats = async (req, res) => {
       });
     }
 
-    // ✅ SAFE FIXED VALUES
-    const selfInvestment = Number(user.myInvestment || 0).toFixed(2);
-    const totalPayout = Number(user.totalWithdrawals || 0).toFixed(2);
-    const myReferrals = user.myReferrals?.length || 0;
-
-    // ✅ TEAM COUNT
     const getTeamCount = async (userIds) => {
-      let total = 0;
+      const users = await User.find({
+        sponsorId: { $in: userIds },
+      }).select("_id");
 
-      const users = await User.find({ sponsorId: { $in: userIds } }).select("_id");
-
-      if (users.length === 0) return 0;
+      if (!users.length) return 0;
 
       const ids = users.map((u) => u._id);
-      total += ids.length;
 
-      const nextLevel = await getTeamCount(ids);
-      total += nextLevel;
-
-      return total;
+      return ids.length + (await getTeamCount(ids));
     };
 
     const myTeam = await getTeamCount([userId]);
 
-    // ✅ TEAM IDS
-    const teamUsers = await User.find({ sponsorId: userId }).select("_id");
+    let teamUsers = await User.find({
+      sponsorId: userId,
+    }).select("_id");
+
     let teamIds = teamUsers.map((u) => u._id);
 
     const getAllTeamIds = async (ids) => {
-      const users = await User.find({ sponsorId: { $in: ids } }).select("_id");
-      if (users.length === 0) return ids;
+      const users = await User.find({
+        sponsorId: { $in: ids },
+      }).select("_id");
+
+      if (!users.length) return ids;
 
       const newIds = users.map((u) => u._id);
+
       return [...ids, ...(await getAllTeamIds(newIds))];
     };
 
     teamIds = await getAllTeamIds(teamIds);
 
-    // ✅ TEAM INVESTMENT
     const teamInvestmentData = await User.aggregate([
       {
-        $match: { _id: { $in: teamIds } },
+        $match: {
+          _id: { $in: teamIds },
+        },
       },
       {
         $group: {
           _id: null,
-          total: { $sum: "$myInvestment" },
+          total: {
+            $sum: "$myInvestment",
+          },
         },
       },
     ]);
 
-    const teamInvestment = Number(teamInvestmentData[0]?.total || 0).toFixed(2);
-
-    // ✅ OTHER FIELDS
-    const earnings = Number(user.totalEarnings || 0).toFixed(2);
-    const dailyROI = Number(user.dailyROI || 0).toFixed(2);
-
-    const referralIncomeData = await ReferralIncome.findOne({ userId });
-
-    const referralIncome = Number(referralIncomeData?.totalIncome || 0).toFixed(2);
-    const todayReferral = Number(referralIncomeData?.todayIncome || 0).toFixed(2);
+    const teamInvestment =
+      Number(teamInvestmentData[0]?.total || 0);
 
     return res.status(200).json({
       success: true,
+
       data: {
-        selfInvestment,
-        totalPayout,
-        myReferrals,
-        myTeam,
+        blockchainHash: user.blockchainHash,
+        walletAddress: user.walletAddress || null,
+
+        username: user.username,
+        name: user.name,
+        email: user.email,
+        mobile: user.mobile,
+
+        active: user.status,
+        verified: user.isVerified,
+        rewardRank: user.rewardRank,
+        joinedOn: user.createdAt,
+        activeDate: user.activeDate,
+
+        selfInvestment: Number(user.myInvestment || 0),
+        todayInvestment: Number(user.todayInvestment || 0),
         teamInvestment,
-        earnings,
-        dailyROI,
-        referralIncome,
-        todayReferral,
+        myReferrals: user.myReferrals.length,
+        myTeam,
+
+        totalEarnings: Number(user.totalEarnings || 0),
+        todayEarnings: Number(user.todayEarnings || 0),
+
+        dailyROI: Number(user.dailyROI || 0),
+        monthlyROI: Number(user.monthlyROI || 0),
+        totalROI: Number(user.totalROI || 0),
+
+        referralIncome: Number(user.referralIncome || 0),
+        roiOnRoiIncome: Number(user.roiOnroiIncome || 0),
+        rewardIncome: Number(user.rewardIncome || 0),
+        leadershipBonusIncome: Number(user.leadershipBonusIncome || 0),
+        workingIncome: Number(user.workingIncome || 0),
+
+        totalWithdrawals: Number(user.totalWithdrawals || 0),
+        todayWithdrawals: Number(user.todayWithdrawals || 0),
+
+        availableBalance:
+          Number(user.totalEarnings || 0) -
+          Number(user.totalWithdrawals || 0),
+
+        referralCode: user.referralCode,
+        sponsorId: user.sponsorId,
+
+        loginBlocked: user.loginBlocked,
+        withdrawalBlocked: user.withdrawalBlock,
       },
     });
   } catch (error) {
     console.error("Dashboard Error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Server Error",

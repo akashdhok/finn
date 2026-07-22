@@ -26,7 +26,7 @@ export const adminLogin = async (req, res) => {
 
     const user = await Admin.findOne({ email: email.toLowerCase() });
     if (!user) {
-      return res.status(401).json({
+      return res.status(200).json({
         message: "User not found",
         success: false,
       });
@@ -34,7 +34,7 @@ export const adminLogin = async (req, res) => {
 
     const matchPassword = await bcrypt.compare(password, user.password);
     if (!matchPassword) {
-      return res.status(401).json({
+      return res.status(200).json({
         message: "Invalid credentials",
         success: false,
       });
@@ -185,7 +185,7 @@ export const allUsers = async (req, res) => {
   try {
     const admin = req.admin;
     if (!admin) {
-      return res.status(401).json({
+      return res.status(400).json({
         message: "Unauthorized",
         success: false,
       });

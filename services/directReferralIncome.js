@@ -1,57 +1,92 @@
+import { checkWorkingCap } from "../helper/capping.js";
 import PercentageModel from "../models/percentage.model.js";
 import ReferralIncome from "../models/referral.model.js";
 import ReferralHistory from "../models/referralHistory.model.js";
 import User from "../models/user.model.js";
 
-export const distributeReferralIncome = async (userId, investmentAmount) => {
+
+const REFERRAL_PERCENTAGES = [5, 2, 1, 1, 1];
+
+export const distributeReferralIncome = async (
+  userId,
+  investmentAmount
+) => {
   try {
-    const user = await User.findById(userId);
-    if (!user || !user.sponsorId) return;
+    let currentUser = await User.findById(userId);
 
-    const sponsor = await User.findById(user.sponsorId);
-    if (!sponsor) return;
+    if (!currentUser) return;
 
-    const percentageData = await PercentageModel.findOne();
-    if (!percentageData) return;
+    for (let level = 0; level < REFERRAL_PERCENTAGES.length; level++) {
+      if (!currentUser.sponsorId) break;
 
-    const percent = percentageData.referralPercentage;
+      const sponsor = await User.findById(currentUser.sponsorId);
 
-    const income = (investmentAmount * percent) / 100;
-    if (income <= 0) return;
+      if (!sponsor) break;
 
-    let referralWallet = await ReferralIncome.findOne({ userId: sponsor._id });
+      // Working Cap
+      const cap = checkWorkingCap(sponsor);
 
-    if (!referralWallet) {
-      referralWallet = await ReferralIncome.create({
+      if (cap.isCapReached) {
+        currentUser = sponsor;
+        continue;
+      }
+
+      const percentage = REFERRAL_PERCENTAGES[level];
+
+      let income = (investmentAmount * percentage) / 100;
+
+      // Remaining Cap
+      income = Math.min(income, cap.remainingCap);
+
+      if (income <= 0) {
+        currentUser = sponsor;
+        continue;
+      }
+
+      let wallet = await ReferralIncome.findOne({
         userId: sponsor._id,
-        totalIncome: income,
-        todayIncome: income,
-        lastIncomeDate: new Date(),
       });
-    } else {
-      referralWallet.totalIncome += income;
-      referralWallet.todayIncome += income;
-      referralWallet.lastIncomeDate = new Date();
-      await referralWallet.save();
+
+      if (!wallet) {
+        wallet = await ReferralIncome.create({
+          userId: sponsor._id,
+          totalIncome: income,
+          todayIncome: income,
+          lastIncomeDate: new Date(),
+        });
+      } else {
+        wallet.totalIncome += income;
+        wallet.todayIncome += income;
+        wallet.lastIncomeDate = new Date();
+
+        await wallet.save();
+      }
+
+      sponsor.workingIncome += income;
+      sponsor.referralIncome +=income;
+      sponsor.totalEarnings += income;
+      sponsor.todayEarnings += income;
+
+      await sponsor.save();
+
+      await ReferralHistory.create({
+        userId: sponsor._id,
+        fromUserId: userId,
+        amount: income,
+        investment: investmentAmount,
+        percentage,
+        level: level + 1,
+      });
+
+      console.log(
+        `✅ Level ${level + 1} Referral Income ${income} distributed to ${sponsor.username}`
+      );
+
+      // Next Level
+      currentUser = sponsor;
     }
-
-    sponsor.totalEarnings += income;
-    sponsor.todayEarnings += income;
-    await sponsor.save();
-
-    await ReferralHistory.create({
-      userId: sponsor._id,
-      fromUserId: user._id,
-      amount: income,
-      investment: investmentAmount,
-      percentage: percent,
-      level: 1,
-    });
-
-    console.log("✅ Referral Income Distributed");
-
   } catch (error) {
-    console.error("❌ REFERRAL ERROR:", error);
+    console.error("Referral Distribution Error:", error);
   }
 };
 

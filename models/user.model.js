@@ -16,7 +16,19 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
-
+  blockchainHash:{
+    type :String,
+    default:null,
+    unique :true
+  },
+referralIncome:{
+  type :Number,
+  default :0
+},
+roiOnroiIncome:{
+  type :Number,
+  default :0
+},
   profilePhoto: String,
   showPassword: String,
 
@@ -24,22 +36,39 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: "user"
   },
-  ewardRank: {
+rewardRank: {
   type: String,
-  enum: ["None", "L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8", "L9", "L10"],
+  enum: [
+    "None",
+    "Bronze Builder",
+    "Silver Starter",
+    "Gold Achiever",
+    "Platinum Producer",
+    "Diamond Director",
+    "Elite Executive",
+    "Master Mentor",
+    "Legend Leader",
+    "Champion Creator",
+    "Crown Conqueror",
+  ],
   default: "None",
 },
 
+// Total Instant Reward Income
 rewardIncome: {
   type: Number,
   default: 0,
 },
 
-dailyRewardIncome: {
+// Total Leadership Bonus Income
+leadershipBonusIncome: {
   type: Number,
   default: 0,
 },
-
+workingIncome: {
+  type: Number,
+  default: 0,
+},
   password: String,
 
   sponsorId: {
@@ -123,6 +152,10 @@ dailyRewardIncome: {
     type: Number,
     default: 0
   },
+  totalROI: {
+  type: Number,
+  default: 0,
+},
 
   totalWithdrawals: {
     type: Number,

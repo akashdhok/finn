@@ -1,3 +1,4 @@
+import { checkWorkingCap } from "../helper/capping.js";
 import PercentageModel from "../models/percentage.model.js";
 import ROIHistoryModel from "../models/roi.model.js";
 import User from "../models/user.model.js";
@@ -8,54 +9,67 @@ export const distributeDailyROI = async () => {
   try {
     console.log("⏳ Running Daily ROI...");
 
-    const dailyROI = 0.5
+    const dailyROI = 0.5;
 
     const users = await User.find({ status: true });
 
     for (const user of users) {
-      const investment = user.myInvestment;
+      const investment = Number(user.myInvestment || 0);
 
-      if (!investment || investment <= 0) continue;
+      if (investment <= 0) continue;
 
-      const maxEarning = investment * 2;
+      // ROI Cap (2X)
+      const roiCap = investment * 2;
+      const totalROI = Number(user.totalROI || 0);
 
-      if (user.totalEarnings >= maxEarning) continue;
+      if (totalROI >= roiCap) continue;
+
+      // Working Cap (3X)
+      const workingCap = checkWorkingCap(user);
+
+      if (workingCap.isCapReached) continue;
 
       let roiAmount = (investment * dailyROI) / 100;
 
-      if (user.totalEarnings + roiAmount > maxEarning) {
-        roiAmount = maxEarning - user.totalEarnings;
-      }
+      // ROI Remaining
+      const remainingROICap = roiCap - totalROI;
+      roiAmount = Math.min(roiAmount, remainingROICap);
+
+      // Working Remaining
+      roiAmount = Math.min(roiAmount, workingCap.remainingCap);
 
       if (roiAmount <= 0) continue;
 
-      // ✅ USER ROI UPDATE
+      // User Update
       user.dailyROI = roiAmount;
-      user.monthlyROI = roiAmount;
+      user.monthlyROI += roiAmount;
+      user.totalROI += roiAmount;
+
       user.totalEarnings += roiAmount;
       user.todayEarnings += roiAmount;
 
+      // Working Income
+      user.workingIncome += roiAmount;
+
       await user.save();
 
-      // ✅ ROI HISTORY
+      // ROI History
       await ROIHistoryModel.create({
         userId: user._id,
         amount: roiAmount,
-        investment: investment,
+        investment,
         type: "daily_roi",
       });
 
-      // 🔥 ✅ ROI ON ROI (YAHI LAGANA THA)
+      // ROI on ROI
       await distributeROIOnROI(user._id, roiAmount);
     }
 
     console.log("✅ Daily ROI Distributed Successfully");
-
   } catch (error) {
     console.error("❌ DAILY ROI ERROR:", error);
   }
 };
-
 
 export const getUserROIHistory = async (req, res) => {
   try {
